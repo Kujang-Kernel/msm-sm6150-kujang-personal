@@ -1,4 +1,4 @@
-name: Reforging
+name: Kujang-Beta
 
 on:
   workflow_dispatch:
@@ -39,33 +39,25 @@ jobs:
       - name: 📥 Setup KernelSU + NoMount + SUSFS (Terbaru)
         if: matrix.build_type == 'KSU-AOSP' || matrix.build_type == 'KSU-OEM'
         run: |
-          # 1. Setup KernelSU Basis
           curl -LSs https://raw.githubusercontent.com/manipvlator/KernelSU/refs/heads/main/kernel/setup.sh | bash -s main
-
-          # 2. Setup NoMount
           curl -LSs https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/dev/kernel/setup.sh | bash -
 
-          # 3. Clone Repository SUSFS Terbaru (Branch 4.14 / Legacy Non-GKI)
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b kernel-4.14 susfs
           
-          # 4. Salin File Header & Source SUSFS ke Kernel
           cp susfs/kernel_patches/fs/susfs.c fs/
           cp susfs/kernel_patches/include/linux/susfs.h include/linux/
           cp susfs/kernel_patches/include/linux/susfs_def.h include/linux/ 2>/dev/null || true
 
-          # 5. Patch KernelSU untuk SUSFS
           cd KernelSU
           patch -p1 < ../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
           cd ..
 
-          # 6. Patch Kernel Hooks untuk SUSFS
           patch -p1 < susfs/kernel_patches/50_add_susfs_in_kernel.patch || true
 
       - name: ⚙️ Inject Defconfig Addons (SUSFS & Fast Charge)
         run: |
           DEFCONFIG="arch/arm64/configs/vendor/sweet_defconfig"
           
-          # Aktifkan Config SUSFS (khusus varian KSU)
           if [ "${{ matrix.build_type }}" != "Non-KSU" ]; then
             echo "" >> "$DEFCONFIG"
             echo "# SUSFS Configurations" >> "$DEFCONFIG"
@@ -78,7 +70,6 @@ jobs:
             echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> "$DEFCONFIG"
           fi
 
-          # Tambahkan Config Pengisian Daya / USB Limit
           echo "" >> "$DEFCONFIG"
           echo "# Power & Charger Configurations" >> "$DEFCONFIG"
           echo "CONFIG_QPNP_SMB5=y" >> "$DEFCONFIG"
@@ -106,7 +97,8 @@ jobs:
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE="$GCC64_PATH/bin/aarch64-elf-" \
             CROSS_COMPILE_ARM32="$GCC32_PATH/bin/arm-eabi-" \
-            LOCALVERSION=-Kujang-Personal
+            LOCALVERSION=-Kujang-Personal \
+            KCFLAGS="-Wno-error=unused-variable -Wno-error=unused-function"
 
           cp out/.config out/sweet_defconfig.txt
 
