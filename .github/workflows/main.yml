@@ -1,4 +1,4 @@
-name: Kujang-Personal
+name: Reforging
 
 on:
   workflow_dispatch:
@@ -21,19 +21,18 @@ jobs:
         run: |
           sudo ln -sf /usr/share/zoneinfo/Asia/Jakarta /etc/localtime
           sudo apt update -y
-          sudo apt install -y bc cpio flex bison git python-is-python3 tar aria2 perl wget curl lz4 libssl-dev libxml2 zip unzip patch
+          sudo apt install -y bc cpio flex bison git python-is-python3 tar aria2 perl wget curl lz4 libssl-dev libxml2
 
           mkdir -p clang && cd clang
           wget https://github.com/ZyCromerZ/Clang/releases/download/17.0.0-20230725-release/Clang-17.0.0-20230725.tar.gz
           tar -xzf Clang-17.0.0-20230725.tar.gz
           rm Clang-17.0.0-20230725.tar.gz
 
-          git clone --depth=1 -b main https://github.com/greenforce-project/gcc-arm64 "$GITHUB_WORKSPACE/gcc64"
-          git clone --depth=1 -b main https://github.com/greenforce-project/gcc-arm "$GITHUB_WORKSPACE/gcc32"
+          git clone --depth=1 -b main https://github.com/greenforce-project/gcc-arm64 gcc64
+          git clone --depth=1 -b main https://github.com/greenforce-project/gcc-arm gcc32
 
           echo "BUILD_TIME=$(TZ=Asia/Jakarta date '+%d%m%Y-%H%M')" >> "$GITHUB_ENV"
           echo "BUILD_DATE=\"$(TZ=Asia/Jakarta date '+%b %d %Y')\"" >> "$GITHUB_ENV"
-          echo "BUILD_REF=${GITHUB_REF_NAME//\//-}" >> "$GITHUB_ENV"
           echo "CLANG_PATH=$GITHUB_WORKSPACE/clang" >> "$GITHUB_ENV"
           echo "GCC64_PATH=$GITHUB_WORKSPACE/gcc64" >> "$GITHUB_ENV"
           echo "GCC32_PATH=$GITHUB_WORKSPACE/gcc32" >> "$GITHUB_ENV"
@@ -41,54 +40,14 @@ jobs:
       - name: 🥷 Setup NoMount
         run: curl -LSs https://raw.githubusercontent.com/maxsteeel/nomount/refs/heads/master/kernel/setup.sh | bash -s master
 
-      - name: 📥 Setup KernelSU + SUSFS
+      - name: 📥 Setup KernelSU
         if: matrix.build_type == 'KSU-AOSP' || matrix.build_type == 'KSU-OEM'
-        run: |
-          # 1. Setup KernelSU Basis
-          curl -LSs https://raw.githubusercontent.com/manipvlator/KernelSU/refs/heads/main/kernel/setup.sh | bash -s main
+        run: curl -LSs https://raw.githubusercontent.com/manipvlator/KernelSU/refs/heads/main/kernel/setup.sh | bash -s main
 
-          # 2. Clone Repository SUSFS 4.14
-          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b kernel-4.14 susfs
-          
-          # 3. Salin File Source & Header SUSFS
-          cp susfs/kernel_patches/fs/susfs.c fs/
-          cp susfs/kernel_patches/include/linux/susfs.h include/linux/
-          cp susfs/kernel_patches/include/linux/susfs_def.h include/linux/
-
-          # 4. Injeksi Pengaman Konstanta Minor Dev
-          if ! grep -q "DEFAULT_KSU_MNT_MINOR_DEV" include/linux/susfs_def.h 2>/dev/null; then
-            echo "#define DEFAULT_KSU_MNT_MINOR_DEV 250" >> include/linux/susfs_def.h
-          fi
-
-          # 5. Patch KernelSU & Kernel Hooks
-          cd KernelSU
-          patch -p1 < ../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
-          cd ..
-          patch -p1 < susfs/kernel_patches/50_add_susfs_in_kernel.patch || true
-
-      - name: ⚙️ Inject Defconfig Addons (SUSFS & Fast Charge)
-        run: |
-          DEFCONFIG="arch/arm64/configs/vendor/sweet_defconfig"
-          
-          if [ "${{ matrix.build_type }}" != "Non-KSU" ]; then
-            echo "" >> "$DEFCONFIG"
-            echo "# SUSFS Configurations" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> "$DEFCONFIG"
-            echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> "$DEFCONFIG"
-          fi
-
-          echo "CONFIG_WERROR=n" >> "$DEFCONFIG"
-          echo "CONFIG_FORCE_FAST_CHARGE=y" >> "$DEFCONFIG"
-
-      - name: 📐 OEM Dimension
+      - name: 🧰 OEM Setup
         if: matrix.build_type == 'KSU-OEM'
         run: |
-          DTS=arch/arm64/boot/dts/qcom/xiaomi/sweet/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi
+          DTS=arch/arm64/boot/dts/qcom/dsi-panel-k6-38-0c-0a-fhd-dsc-video.dtsi
           sed -i \
             -e 's/qcom,mdss-pan-physical-width-dimension = <69>;/qcom,mdss-pan-physical-width-dimension = <695>;/' \
             -e 's/qcom,mdss-pan-physical-height-dimension = <154>;/qcom,mdss-pan-physical-height-dimension = <1546>;/' \
@@ -98,18 +57,15 @@ jobs:
         run: |
           export PATH="$CLANG_PATH/bin:$GCC64_PATH/bin:$GCC32_PATH/bin:$PATH"
           export KBUILD_BUILD_USER=Manipulator
-          export KBUILD_BUILD_HOST=LineageOS
-          export KBUILD_COMPILER_STRING="ZyCromerZ Clang 17.0.0"
+          export KBUILD_BUILD_HOST=ExoticGANK
+          export KBUILD_COMPILER_STRING="$CLANG_PATH/bin/clang"
           export CFLAGS_EXTRA="-DBUILD_DATE=$BUILD_DATE"
 
           make O=out ARCH=arm64 vendor/sweet_defconfig
           make -j"$(nproc --all)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE="$GCC64_PATH/bin/aarch64-elf-" \
-            CROSS_COMPILE_ARM32="$GCC32_PATH/bin/arm-eabi-" \
-            LOCALVERSION=-Kujang-Personal \
-            KCFLAGS="-w -Wno-error -Wno-error=unused-variable -Wno-error=unused-function" \
-            EXTRA_CFLAGS="-w -Wno-error"
+            CROSS_COMPILE_ARM32="$GCC32_PATH/bin/arm-eabi-"
 
           cp out/.config out/sweet_defconfig.txt
 
@@ -124,35 +80,34 @@ jobs:
           cp out/arch/arm64/boot/dtb.img "$RUNNER_TEMP/dtb-stock.img"
           cp out/arch/arm64/boot/dtbo.img "$RUNNER_TEMP/dtbo-stock.img"
 
-          git apply arch/arm64/boot/dts/qcom/xiaomi/sweet/90hz-dtbo.patch
+          git apply arch/arm64/boot/dts/qcom/90hz-dtbo.patch
           rm -rf out/arch/arm64/boot/dts out/arch/arm64/boot/dtb.img out/arch/arm64/boot/dtbo.img
 
           export PATH="$CLANG_PATH/bin:$GCC64_PATH/bin:$GCC32_PATH/bin:$PATH"
           export KBUILD_BUILD_USER=Manipulator
-          export KBUILD_BUILD_HOST=LineageOS
-          export KBUILD_COMPILER_STRING="ZyCromerZ Clang 17.0.0"
+          export KBUILD_BUILD_HOST=ExoticGANK
+          export KBUILD_COMPILER_STRING="$CLANG_PATH/bin/clang"
           export CFLAGS_EXTRA="-DBUILD_DATE=$BUILD_DATE"
 
           make -j"$(nproc --all)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld \
             CLANG_TRIPLE=aarch64-linux-gnu- \
             CROSS_COMPILE="$GCC64_PATH/bin/aarch64-elf-" \
-            CROSS_COMPILE_ARM32="$GCC32_PATH/bin/arm-eabi-" \
-            KCFLAGS="-w -Wno-error"
+            CROSS_COMPILE_ARM32="$GCC32_PATH/bin/arm-eabi-"
 
           cp out/arch/arm64/boot/dtbo.img "$RUNNER_TEMP/dtbo-90hz.img"
           cp "$RUNNER_TEMP/dtb-stock.img" out/arch/arm64/boot/dtb.img
           cp "$RUNNER_TEMP/dtbo-stock.img" out/arch/arm64/boot/dtbo.img
-          git apply -R arch/arm64/boot/dts/qcom/xiaomi/sweet/90hz-dtbo.patch
+          git apply -R arch/arm64/boot/dts/qcom/90hz-dtbo.patch
 
       - name: 📂 Prepare AnyKernel3
         run: |
-          git clone --depth=1 -b reforge https://github.com/manipvlator/Anykernel3.git AnyKernel3
+          git clone --depth=1 -b strix https://github.com/manipvlator/Anykernel3.git AnyKernel3
           cp out/arch/arm64/boot/{Image.gz,dtbo.img,dtb.img} AnyKernel3/
           cp "$RUNNER_TEMP/dtbo-90hz.img" AnyKernel3/dtbo-90hz.img
-          (cd AnyKernel3 && zip -r "../Kujang-Personal_${{ matrix.build_type }}-${BUILD_REF}-${BUILD_TIME}.zip" . -x ".git/*")
+          (cd AnyKernel3 && zip -r "../StriXotic-Limited_${{ matrix.build_type }}-${{ github.ref_name }}-${BUILD_TIME}.zip" . -x ".git/*")
 
       - name: 📤 Upload Flashable ZIP
         uses: actions/upload-artifact@v7
         with:
-          name: Kujang-Personal_${{ matrix.build_type }}-${{ env.BUILD_REF }}-${{ env.BUILD_TIME }}
+          name: StriXotic-Limited_${{ matrix.build_type }}-${{ github.ref_name }}-${{ env.BUILD_TIME }}
           path: AnyKernel3/*
