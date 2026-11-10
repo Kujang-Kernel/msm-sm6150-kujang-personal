@@ -36,7 +36,7 @@ jobs:
           echo "GCC64_PATH=$GITHUB_WORKSPACE/gcc64" >> "$GITHUB_ENV"
           echo "GCC32_PATH=$GITHUB_WORKSPACE/gcc32" >> "$GITHUB_ENV"
 
-      - name: 📥 Setup KernelSU + NoMount + SUSFS (Fix Header)
+      - name: 📥 Setup KernelSU + NoMount + SUSFS (Fix Header & Minor Dev)
         if: matrix.build_type == 'KSU-AOSP' || matrix.build_type == 'KSU-OEM'
         run: |
           # 1. Setup KernelSU Basis
@@ -48,17 +48,22 @@ jobs:
           # 3. Clone Repository SUSFS Terbaru (Branch 4.14)
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b kernel-4.14 susfs
           
-          # 4. Salin File Source & Header SUSFS (Wajib tanpa pengabaian agar susfs_def.h tersalin benar)
+          # 4. Salin File Source & Header SUSFS
           cp susfs/kernel_patches/fs/susfs.c fs/
           cp susfs/kernel_patches/include/linux/susfs.h include/linux/
           cp susfs/kernel_patches/include/linux/susfs_def.h include/linux/
 
-          # 5. Patch KernelSU untuk SUSFS
+          # 5. Injeksi Manual Pengaman Konstanta Minor Dev agar tidak Undeclared Identifier
+          if ! grep -q "DEFAULT_KSU_MNT_MINOR_DEV" include/linux/susfs_def.h 2>/dev/null; then
+            echo "#define DEFAULT_KSU_MNT_MINOR_DEV 250" >> include/linux/susfs_def.h
+          fi
+
+          # 6. Patch KernelSU untuk SUSFS
           cd KernelSU
           patch -p1 < ../susfs/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
           cd ..
 
-          # 6. Patch Kernel Hooks untuk SUSFS
+          # 7. Patch Kernel Hooks untuk SUSFS
           patch -p1 < susfs/kernel_patches/50_add_susfs_in_kernel.patch || true
 
       - name: ⚙️ Inject Defconfig Addons (SUSFS & Fast Charge)
