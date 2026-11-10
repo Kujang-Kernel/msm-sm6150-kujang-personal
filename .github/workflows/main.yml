@@ -36,7 +36,7 @@ jobs:
           echo "GCC64_PATH=$GITHUB_WORKSPACE/gcc64" >> "$GITHUB_ENV"
           echo "GCC32_PATH=$GITHUB_WORKSPACE/gcc32" >> "$GITHUB_ENV"
 
-      - name: 📥 Setup KernelSU + NoMount + SUSFS (Terbaru)
+      - name: 📥 Setup KernelSU + NoMount + SUSFS (Fix Header)
         if: matrix.build_type == 'KSU-AOSP' || matrix.build_type == 'KSU-OEM'
         run: |
           # 1. Setup KernelSU Basis
@@ -48,10 +48,10 @@ jobs:
           # 3. Clone Repository SUSFS Terbaru (Branch 4.14)
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b kernel-4.14 susfs
           
-          # 4. Salin File Header & Source SUSFS ke Kernel
+          # 4. Salin File Source & Header SUSFS (Wajib tanpa pengabaian agar susfs_def.h tersalin benar)
           cp susfs/kernel_patches/fs/susfs.c fs/
           cp susfs/kernel_patches/include/linux/susfs.h include/linux/
-          cp susfs/kernel_patches/include/linux/susfs_def.h include/linux/ 2>/dev/null || true
+          cp susfs/kernel_patches/include/linux/susfs_def.h include/linux/
 
           # 5. Patch KernelSU untuk SUSFS
           cd KernelSU
@@ -78,7 +78,7 @@ jobs:
             echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> "$DEFCONFIG"
           fi
 
-          # Nonaktifkan WERROR di defconfig agar warning tidak dianggap error oleh Makefile
+          # Nonaktifkan WERROR di defconfig
           echo "CONFIG_WERROR=n" >> "$DEFCONFIG"
 
           # Tambahkan Config Pengisian Daya / USB Limit
@@ -134,4 +134,3 @@ jobs:
         with:
           name: Kujang-Personal_${{ matrix.build_type }}-${{ github.ref_name }}-${{ env.BUILD_TIME }}
           path: ${{ env.ZIP_NAME }}
-          
