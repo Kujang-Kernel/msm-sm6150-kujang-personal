@@ -1,0 +1,60 @@
+name: Build Android Kernel (Clang 17)
+
+on:
+  push:
+    branches: [ "Kujang-Beta" ]
+  pull_request:
+    branches: [ "Kujang-Beta" ]
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            bc bison build-essential ccache curl flex g++-multilib gcc-multilib \
+            git libncurses5-dev libssl-dev libelf-dev lld llvm make wget zip zlib1g-dev
+
+      - name: Setup Clang 17 Toolchain
+        run: |
+          # Mengunduh atau menyiapkan Clang 17 (Contoh menggunakan LLVM official script atau prebuilt)
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 17
+          rm llvm.sh
+          
+          # Pastikan binary clang-17 bisa diakses sebagai clang
+          sudo ln -sf /usr/bin/clang-17 /usr/bin/clang
+          sudo ln -sf /usr/bin/clang++-17 /usr/bin/clang++
+
+      - name: Setup Environment Variables
+        run: |
+          echo "ARCH=arm64" >> $GITHUB_ENV
+          echo "SUBARCH=arm64" >> $GITHUB_ENV
+          echo "KBUILD_BUILD_USER=kujang" >> $GITHUB_ENV
+          echo "KBUILD_BUILD_HOST=github-actions" >> $GITHUB_ENV
+
+      - name: Build Kernel Defconfig
+        run: |
+          # Ganti 'codename_defconfig' dengan defconfig perangkat MSM-SM6150 kamu yang sebenarnya di folder arch/arm64/configs/
+          make O=out CC=clang LD=ld.lld defconfig
+
+      - name: Compile Kernel
+        run: |
+          make O=out \
+            CC=clang \
+            LD=ld.lld \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
+            -j$(nproc)
